@@ -7863,6 +7863,13 @@ var set_task_help_reducer_default = {
   requestHelp: t.bool()
 };
 
+// src/module_bindings/submit_matrix_job_reducer.ts
+var submit_matrix_job_reducer_default = {
+  matrixAJson: t.string(),
+  matrixBJson: t.string(),
+  tileSize: t.u32()
+};
+
 // src/module_bindings/submit_result_reducer.ts
 var submit_result_reducer_default = {
   taskId: t.u32(),
@@ -7902,6 +7909,35 @@ var mandelbrot_chunk_queue_table_default = t.row({
   height: t.u32(),
   maxIterations: t.u32().name("max_iterations"),
   pixelData: t.option(t.string()).name("pixel_data"),
+  updatedAtMicros: t.u64().name("updated_at_micros")
+});
+
+// src/module_bindings/matrix_chunk_queue_table.ts
+var matrix_chunk_queue_table_default = t.row({
+  chunkId: t.u64().primaryKey().name("chunk_id"),
+  taskId: t.u32().name("task_id"),
+  status: t.string(),
+  assignedNode: t.option(t.identity()).name("assigned_node"),
+  rowStart: t.u32().name("row_start"),
+  rowEnd: t.u32().name("row_end"),
+  colStart: t.u32().name("col_start"),
+  colEnd: t.u32().name("col_end"),
+  tileResultJson: t.option(t.string()).name("tile_result_json"),
+  updatedAtMicros: t.u64().name("updated_at_micros")
+});
+
+// src/module_bindings/matrix_job_config_table.ts
+var matrix_job_config_table_default = t.row({
+  id: t.u32().primaryKey(),
+  taskId: t.u32().name("task_id"),
+  aRows: t.u32().name("a_rows"),
+  aCols: t.u32().name("a_cols"),
+  bCols: t.u32().name("b_cols"),
+  tileSize: t.u32().name("tile_size"),
+  matrixAJson: t.string().name("matrix_a_json"),
+  matrixBJson: t.string().name("matrix_b_json"),
+  resultJson: t.option(t.string()).name("result_json"),
+  status: t.string(),
   updatedAtMicros: t.u64().name("updated_at_micros")
 });
 
@@ -7984,6 +8020,37 @@ var tablesSchema = schema({
       { name: "mandelbrot_chunk_queue_chunk_id_key", constraint: "unique", columns: ["chunkId"] }
     ]
   }, mandelbrot_chunk_queue_table_default),
+  matrixChunkQueue: table({
+    name: "matrix_chunk_queue",
+    indexes: [
+      { accessor: "matrix_chunk_queue_by_assigned_node", name: "matrix_chunk_queue_assigned_node_idx_btree", algorithm: "btree", columns: [
+        "assignedNode"
+      ] },
+      { accessor: "chunkId", name: "matrix_chunk_queue_chunk_id_idx_btree", algorithm: "btree", columns: [
+        "chunkId"
+      ] },
+      { accessor: "matrix_chunk_queue_by_status", name: "matrix_chunk_queue_status_idx_btree", algorithm: "btree", columns: [
+        "status"
+      ] },
+      { accessor: "matrix_chunk_queue_by_task_id", name: "matrix_chunk_queue_task_id_idx_btree", algorithm: "btree", columns: [
+        "taskId"
+      ] }
+    ],
+    constraints: [
+      { name: "matrix_chunk_queue_chunk_id_key", constraint: "unique", columns: ["chunkId"] }
+    ]
+  }, matrix_chunk_queue_table_default),
+  matrixJobConfig: table({
+    name: "matrix_job_config",
+    indexes: [
+      { accessor: "id", name: "matrix_job_config_id_idx_btree", algorithm: "btree", columns: [
+        "id"
+      ] }
+    ],
+    constraints: [
+      { name: "matrix_job_config_id_key", constraint: "unique", columns: ["id"] }
+    ]
+  }, matrix_job_config_table_default),
   nodeStatus: table({
     name: "node_status",
     indexes: [
@@ -8055,6 +8122,7 @@ var reducersSchema = reducers(
   reducerSchema("reset_task", reset_task_reducer_default),
   reducerSchema("set_task_active", set_task_active_reducer_default),
   reducerSchema("set_task_help", set_task_help_reducer_default),
+  reducerSchema("submit_matrix_job", submit_matrix_job_reducer_default),
   reducerSchema("submit_result", submit_result_reducer_default)
 );
 var proceduresSchema = procedures();

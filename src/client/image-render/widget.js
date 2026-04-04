@@ -129,6 +129,18 @@ function getTaskProgress(task) {
 		}
 	}
 
+	if (task.taskKey === 'matrix_mul') {
+		for (const chunk of conn.db.matrixChunkQueue.iter()) {
+			if (Number(chunk.taskId) !== Number(task.taskId)) {
+				continue;
+			}
+			total += 1;
+			if (chunk.status === 'completed') {
+				completed += 1;
+			}
+		}
+	}
+
 	return {
 		total,
 		completed,
@@ -168,7 +180,11 @@ function renderTaskList() {
 
 	const tasks = [];
 	for (const task of conn.db.task.iter()) {
-		if (task.requestHelp && task.isActive) {
+		if (
+			task.requestHelp &&
+			task.isActive &&
+			(task.taskKey === 'mandelbrot' || task.taskKey === 'pin_guess' || task.taskKey === 'matrix_mul')
+		) {
 			tasks.push(task);
 		}
 	}
@@ -276,6 +292,61 @@ function processPinChunkIfMine(row) {
 	});
 }
 
+function processMatrixChunkIfMine(row) {
+	if (!conn || !isContributing || Number(row.taskId) !== Number(activeTaskId) || activeTaskKey !== 'matrix_mul') {
+		return;
+	}
+
+	const assignedNode = unwrapOption(row.assignedNode);
+	if (!assignedNode) {
+		return;
+	}
+
+	const assignedToMe = assignedNode.toHexString() === myIdentityHex;
+	if (!assignedToMe || row.status !== 'processing') {
+		return;
+	}
+
+	const chunkId = row.chunkId.toString();
+	if (activeChunkIds.has(chunkId)) {
+		return;
+	}
+
+	const job = conn.db.matrixJobConfig.id.find(1);
+	if (!job) {
+		setStatus('No active matrix job found.');
+		return;
+	}
+
+	let matrixA;
+	let matrixB;
+	try {
+		matrixA = JSON.parse(job.matrixAJson);
+		matrixB = JSON.parse(job.matrixBJson);
+	} catch {
+		setStatus('Invalid matrix job payload.');
+		return;
+	}
+
+	activeChunkIds.add(chunkId);
+	setStatus(`Computing matrix chunk #${chunkId}...`);
+	worker.postMessage({
+		type: 'compute',
+		payload: {
+			taskKey: 'matrix_mul',
+			taskId: Number(row.taskId),
+			chunkId,
+			rowStart: Number(row.rowStart),
+			rowEnd: Number(row.rowEnd),
+			colStart: Number(row.colStart),
+			colEnd: Number(row.colEnd),
+			aCols: Number(job.aCols),
+			matrixA,
+			matrixB,
+		},
+	});
+}
+
 worker.onmessage = event => {
 	const { type, payload } = event.data ?? {};
 
@@ -287,6 +358,9 @@ worker.onmessage = event => {
 			}
 			if (payload.taskKey === 'pin_guess') {
 				resultData = payload.foundPin;
+			}
+			if (payload.taskKey === 'matrix_mul') {
+				resultData = JSON.stringify(payload.tile);
 			}
 
 			conn.reducers.submitResult({
@@ -303,6 +377,8 @@ worker.onmessage = event => {
 		setDonatedCount(getDonatedCount() + 1);
 		if (payload.taskKey === 'pin_guess' && payload.foundPin) {
 			setStatus(`PIN found: ${payload.foundPin}.`);
+		} else if (payload.taskKey === 'matrix_mul') {
+			setStatus(`Submitted matrix chunk #${payload.chunkId}. Requesting more work...`);
 		} else {
 			setStatus(`Submitted chunk #${payload.chunkId}. Requesting more work...`);
 		}
@@ -424,6 +500,16 @@ function connect() {
 				processPinChunkIfMine(row);
 				renderTaskList();
 			});
+			connection.db.matrixChunkQueue.onInsert((_ctx, row) => {
+				processMatrixChunkIfMine(row);
+				renderTaskList();
+			});
+			connection.db.matrixChunkQueue.onUpdate((_ctx, _oldRow, row) => {
+				processMatrixChunkIfMine(row);
+				renderTaskList();
+			});
+			connection.db.matrixJobConfig.onInsert(renderTaskList);
+			connection.db.matrixJobConfig.onUpdate(renderTaskList);
 
 			const subscription = connection.subscriptionBuilder().onApplied(() => {
 				setStatus('Connected. Pick a task to contribute.');
@@ -440,6 +526,8 @@ function connect() {
 					'SELECT * FROM task',
 					'SELECT * FROM mandelbrot_chunk_queue',
 					'SELECT * FROM pin_chunk_queue',
+					'SELECT * FROM matrix_job_config',
+					'SELECT * FROM matrix_chunk_queue',
 				]);
 			}
 

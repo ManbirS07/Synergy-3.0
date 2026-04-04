@@ -45,6 +45,35 @@ export const MandelbrotChunkQueue = __t.object("MandelbrotChunkQueue", {
 });
 export type MandelbrotChunkQueue = __Infer<typeof MandelbrotChunkQueue>;
 
+export const MatrixChunkQueue = __t.object("MatrixChunkQueue", {
+  chunkId: __t.u64(),
+  taskId: __t.u32(),
+  status: __t.string(),
+  assignedNode: __t.option(__t.identity()),
+  rowStart: __t.u32(),
+  rowEnd: __t.u32(),
+  colStart: __t.u32(),
+  colEnd: __t.u32(),
+  tileResultJson: __t.option(__t.string()),
+  updatedAtMicros: __t.u64(),
+});
+export type MatrixChunkQueue = __Infer<typeof MatrixChunkQueue>;
+
+export const MatrixJobConfig = __t.object("MatrixJobConfig", {
+  id: __t.u32(),
+  taskId: __t.u32(),
+  aRows: __t.u32(),
+  aCols: __t.u32(),
+  bCols: __t.u32(),
+  tileSize: __t.u32(),
+  matrixAJson: __t.string(),
+  matrixBJson: __t.string(),
+  resultJson: __t.option(__t.string()),
+  status: __t.string(),
+  updatedAtMicros: __t.u64(),
+});
+export type MatrixJobConfig = __Infer<typeof MatrixJobConfig>;
+
 export const NodeStatus = __t.object("NodeStatus", {
   nodeId: __t.identity(),
   donatedChunks: __t.u64(),

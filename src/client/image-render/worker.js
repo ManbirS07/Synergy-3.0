@@ -138,6 +138,32 @@ async function computePinChunk(payload) {
 	return undefined;
 }
 
+function computeMatrixTile(payload) {
+	const a = payload.matrixA;
+	const b = payload.matrixB;
+	const rowStart = Number(payload.rowStart);
+	const rowEnd = Number(payload.rowEnd);
+	const colStart = Number(payload.colStart);
+	const colEnd = Number(payload.colEnd);
+	const aCols = Number(payload.aCols);
+
+	const tileRows = rowEnd - rowStart;
+	const tileCols = colEnd - colStart;
+	const tile = Array.from({ length: tileRows }, () => Array.from({ length: tileCols }, () => 0));
+
+	for (let i = rowStart; i < rowEnd; i += 1) {
+		for (let j = colStart; j < colEnd; j += 1) {
+			let sum = 0;
+			for (let k = 0; k < aCols; k += 1) {
+				sum += Number(a[i][k]) * Number(b[k][j]);
+			}
+			tile[i - rowStart][j - colStart] = sum;
+		}
+	}
+
+	return tile;
+}
+
 self.onmessage = async event => {
 	const { type, payload } = event.data ?? {};
 	if (type !== 'compute') {
@@ -175,6 +201,20 @@ self.onmessage = async event => {
 					taskId: payload.taskId,
 					chunkId: payload.chunkId,
 					foundPin,
+				},
+			});
+			return;
+		}
+
+		if (payload.taskKey === 'matrix_mul') {
+			const tile = computeMatrixTile(payload);
+			self.postMessage({
+				type: 'chunk-computed',
+				payload: {
+					taskKey: 'matrix_mul',
+					taskId: payload.taskId,
+					chunkId: payload.chunkId,
+					tile,
 				},
 			});
 			return;
