@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>GridForGood PIN Dashboard</title>
+			<title>Synergy PIN Dashboard</title>
 		<style>
 			:root {
 				--bg: #060d1b;
@@ -33,7 +33,7 @@
 			}
 
 			.layout {
-				width: min(1100px, 100%);
+				width: min(1200px, 100%);
 				display: grid;
 				gap: 1rem;
 			}
@@ -51,6 +51,72 @@
 				display: grid;
 				grid-template-columns: repeat(4, minmax(0, 1fr));
 				gap: 1rem;
+			}
+
+			.navbar {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 1rem;
+				min-height: 72px;
+				padding: 0.85rem 1rem;
+				border: 1px solid #2c4b6b;
+				border-radius: 16px;
+				background: rgba(8, 18, 34, 0.88);
+				backdrop-filter: blur(10px);
+				box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+			}
+
+			.brand {
+				color: #f3f8ff;
+				text-decoration: none;
+				font-weight: 800;
+				letter-spacing: 0.04em;
+				text-transform: uppercase;
+				white-space: nowrap;
+				flex: 0 0 auto;
+			}
+
+			.nav-links {
+				display: flex;
+				align-items: center;
+				gap: 0.2rem;
+				flex-wrap: nowrap;
+				overflow-x: auto;
+				scrollbar-width: thin;
+				justify-content: flex-end;
+				flex: 1 1 auto;
+				min-width: 0;
+			}
+
+			.nav-link {
+				color: #c6d8ee;
+				text-decoration: none;
+				padding: 0.3rem 0.5rem;
+				display: inline-flex;
+				align-items: center;
+				min-height: 36px;
+				border-radius: 999px;
+				border: 1px solid transparent;
+				font-weight: 600;
+				font-size: 0.9rem;
+				white-space: nowrap;
+				flex-shrink: 0;
+				transition: transform 160ms ease, background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+			}
+
+			.nav-link:hover {
+				color: #f3f8ff;
+				border-color: #3c5f83;
+				background: rgba(255, 255, 255, 0.08);
+				transform: translateY(-1px);
+			}
+
+			.nav-link.active {
+				color: #081626;
+				background: #4fd1a7;
+				border-color: #4fd1a7;
+				font-weight: 700;
 			}
 
 			.card {
@@ -92,6 +158,16 @@
 			}
 
 			@media (max-width: 860px) {
+				.navbar {
+					align-items: flex-start;
+				}
+
+				.nav-links {
+					flex-wrap: wrap;
+					overflow-x: visible;
+					justify-content: flex-start;
+				}
+
 				.stats {
 					grid-template-columns: repeat(2, minmax(0, 1fr));
 				}
@@ -100,6 +176,16 @@
 	</head>
 	<body>
 		<main class="layout">
+			<nav class="navbar" aria-label="Primary">
+				<a class="brand" href="../index.html">Synergy</a>
+				<div class="nav-links">
+
+					<a class="nav-link" href="../dashboard/index.html">Server Dashboard</a>
+					<a class="nav-link" href="../mandelbrot-dashboard/index.html">Mandelbrot Dashboard</a>
+					<a class="nav-link active" href="./index.html">PIN Dashboard</a>
+					<a class="nav-link" href="../matrix-dashboard/index.html">Matrix Dashboard</a>
+				</div>
+			</nav>
 			<div class="banner" id="found-banner"></div>
 
 			<section class="stats">

@@ -119,4 +119,3 @@ export const Task = __t.object("Task", {
   updatedAtMicros: __t.u64(),
 });
 export type Task = __Infer<typeof Task>;
-
