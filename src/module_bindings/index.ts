@@ -41,6 +41,7 @@ import ResetPinCrackReducer from "./reset_pin_crack_reducer";
 import ResetTaskReducer from "./reset_task_reducer";
 import SetTaskActiveReducer from "./set_task_active_reducer";
 import SetTaskHelpReducer from "./set_task_help_reducer";
+import SubmitMatrixJobReducer from "./submit_matrix_job_reducer";
 import SubmitResultReducer from "./submit_result_reducer";
 
 // Import all procedure arg schemas
@@ -48,6 +49,8 @@ import SubmitResultReducer from "./submit_result_reducer";
 // Import all table schema definitions
 import GridConfigRow from "./grid_config_table";
 import MandelbrotChunkQueueRow from "./mandelbrot_chunk_queue_table";
+import MatrixChunkQueueRow from "./matrix_chunk_queue_table";
+import MatrixJobConfigRow from "./matrix_job_config_table";
 import NodeStatusRow from "./node_status_table";
 import PinChunkQueueRow from "./pin_chunk_queue_table";
 import PinCrackConfigRow from "./pin_crack_config_table";
@@ -88,6 +91,37 @@ const tablesSchema = __schema({
       { name: 'mandelbrot_chunk_queue_chunk_id_key', constraint: 'unique', columns: ['chunkId'] },
     ],
   }, MandelbrotChunkQueueRow),
+  matrixChunkQueue: __table({
+    name: 'matrix_chunk_queue',
+    indexes: [
+      { accessor: 'matrix_chunk_queue_by_assigned_node', name: 'matrix_chunk_queue_assigned_node_idx_btree', algorithm: 'btree', columns: [
+        'assignedNode',
+      ] },
+      { accessor: 'chunkId', name: 'matrix_chunk_queue_chunk_id_idx_btree', algorithm: 'btree', columns: [
+        'chunkId',
+      ] },
+      { accessor: 'matrix_chunk_queue_by_status', name: 'matrix_chunk_queue_status_idx_btree', algorithm: 'btree', columns: [
+        'status',
+      ] },
+      { accessor: 'matrix_chunk_queue_by_task_id', name: 'matrix_chunk_queue_task_id_idx_btree', algorithm: 'btree', columns: [
+        'taskId',
+      ] },
+    ],
+    constraints: [
+      { name: 'matrix_chunk_queue_chunk_id_key', constraint: 'unique', columns: ['chunkId'] },
+    ],
+  }, MatrixChunkQueueRow),
+  matrixJobConfig: __table({
+    name: 'matrix_job_config',
+    indexes: [
+      { accessor: 'id', name: 'matrix_job_config_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'matrix_job_config_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, MatrixJobConfigRow),
   nodeStatus: __table({
     name: 'node_status',
     indexes: [
@@ -161,6 +195,7 @@ const reducersSchema = __reducers(
   __reducerSchema("reset_task", ResetTaskReducer),
   __reducerSchema("set_task_active", SetTaskActiveReducer),
   __reducerSchema("set_task_help", SetTaskHelpReducer),
+  __reducerSchema("submit_matrix_job", SubmitMatrixJobReducer),
   __reducerSchema("submit_result", SubmitResultReducer),
 );
 

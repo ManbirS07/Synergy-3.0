@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>GridForGood Matrix Node</title>
+		<style>
+			:root {
+				--bg: #081022;
+				--panel: #111d3d;
+				--line: #2a3f78;
+				--text: #eef4ff;
+				--muted: #9caed8;
+				--accent: #32d399;
+			}
+
+			body {
+				margin: 0;
+				font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+				color: var(--text);
+				background:
+					radial-gradient(circle at 20% 10%, #172e64 0%, transparent 45%),
+					radial-gradient(circle at 90% 0%, #18364f 0%, transparent 35%),
+					var(--bg);
+			}
+
+			.page {
+				max-width: 980px;
+				margin: 0 auto;
+				padding: 1.2rem;
+			}
+
+			.hero {
+				background: #f6f9ff;
+				color: #1a2240;
+				border-radius: 16px;
+				padding: 1.3rem;
+			}
+
+			.card {
+				margin-top: 1rem;
+				background: var(--panel);
+				border: 1px solid var(--line);
+				border-radius: 16px;
+				padding: 1rem;
+			}
+
+			.row {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.7rem;
+				align-items: center;
+			}
+
+			.btn {
+				border: 0;
+				border-radius: 10px;
+				padding: 0.55rem 0.85rem;
+				font-weight: 700;
+				cursor: pointer;
+				background: var(--accent);
+				color: #082116;
+			}
+
+			.pill {
+				border: 1px solid var(--line);
+				border-radius: 999px;
+				padding: 0.3rem 0.75rem;
+				font-size: 0.88rem;
+				color: var(--muted);
+			}
+
+			.mono {
+				font-family: 'Consolas', 'Courier New', monospace;
+			}
+
+			#status {
+				margin-top: 0.75rem;
+				color: var(--muted);
+			}
+		</style>
+	</head>
+	<body>
+		<main class="page">
+			<section class="hero">
+				<h1>Matrix Multiplication Node</h1>
+				<p>
+					This edge node claims matrix tiles from <code class="mono">matrix_chunk_queue</code>, computes
+					each tile, and submits the result tile.
+				</p>
+			</section>
+
+			<section class="card">
+				<div class="row">
+					<button class="btn" id="toggle-compute">Enable Matrix Compute</button>
+					<span class="pill">Node: <strong id="node-id" class="mono">disconnected</strong></span>
+					<span class="pill">Chunks Donated: <strong id="donated-chunks">0</strong></span>
+					<span class="pill">Tiles Solved: <strong id="tiles-solved">0</strong></span>
+				</div>
+				<div id="status">Idle. Submit a matrix job and enable compute.</div>
+			</section>
+		</main>
+
+		<script type="module" src="./widget.js"></script>
+	</body>
+</html>

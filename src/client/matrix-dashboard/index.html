@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>GridForGood Matrix Dashboard</title>
+		<style>
+			:root {
+				--bg: #0a0f1f;
+				--card: #131b33;
+				--line: #243153;
+				--text: #eef3ff;
+				--muted: #96a6d8;
+				--accent: #32d399;
+			}
+
+			* { box-sizing: border-box; }
+
+			body {
+				margin: 0;
+				min-height: 100vh;
+				font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+				color: var(--text);
+				background:
+					radial-gradient(circle at 20% 15%, #1b2b66 0%, transparent 45%),
+					radial-gradient(circle at 80% 0%, #173c4f 0%, transparent 40%),
+					var(--bg);
+				padding: 1rem;
+			}
+
+			.layout {
+				width: min(1200px, 100%);
+				margin: 0 auto;
+				display: grid;
+				gap: 1rem;
+			}
+
+			.card {
+				background: linear-gradient(140deg, #1a2550, var(--card));
+				border: 1px solid var(--line);
+				border-radius: 16px;
+				padding: 1rem;
+			}
+
+			.grid {
+				display: grid;
+				grid-template-columns: repeat(3, minmax(0, 1fr));
+				gap: 0.75rem;
+			}
+
+			label {
+				display: block;
+				font-size: 0.85rem;
+				color: var(--muted);
+				margin-bottom: 0.35rem;
+			}
+
+			textarea,
+			input {
+				width: 100%;
+				border-radius: 10px;
+				border: 1px solid var(--line);
+				background: #0b1224;
+				color: var(--text);
+				padding: 0.55rem;
+				font-family: 'Consolas', 'Courier New', monospace;
+			}
+
+			textarea {
+				min-height: 140px;
+				resize: vertical;
+			}
+
+			.btn {
+				border: 0;
+				border-radius: 10px;
+				padding: 0.55rem 0.85rem;
+				font-weight: 700;
+				cursor: pointer;
+				background: var(--accent);
+				color: #082116;
+				margin-top: 0.75rem;
+			}
+
+			.btn-secondary {
+				background: transparent;
+				color: var(--text);
+				border: 1px solid var(--line);
+				margin-left: 0.5rem;
+			}
+
+			.file-input {
+				margin-top: 0.6rem;
+			}
+
+			.metrics {
+				display: grid;
+				grid-template-columns: repeat(4, minmax(0, 1fr));
+				gap: 0.75rem;
+			}
+
+			.metric {
+				border: 1px solid var(--line);
+				border-radius: 12px;
+				padding: 0.7rem;
+			}
+
+			.metric .label {
+				font-size: 0.82rem;
+				color: var(--muted);
+			}
+
+			.metric .value {
+				font-size: 1.4rem;
+				font-weight: 700;
+				margin-top: 0.2rem;
+			}
+
+			#status {
+				margin-top: 0.6rem;
+				color: var(--muted);
+			}
+
+			.table-wrap {
+				overflow: auto;
+				max-height: 420px;
+			}
+
+			table {
+				border-collapse: collapse;
+				width: max-content;
+				min-width: 100%;
+			}
+
+			td {
+				border: 1px solid var(--line);
+				padding: 0.35rem 0.45rem;
+				font-family: 'Consolas', 'Courier New', monospace;
+				font-size: 0.85rem;
+			}
+
+			@media (max-width: 900px) {
+				.grid,
+				.metrics {
+					grid-template-columns: 1fr;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main class="layout">
+			<section class="card">
+				<h1>Matrix Multiplication Dashboard</h1>
+				<p>Submit matrices A and B, then watch distributed nodes compute C = A x B by tiles.</p>
+				<div class="grid">
+					<div>
+						<label for="matrix-a">Matrix A (JSON 2D array)</label>
+						<textarea id="matrix-a">[[1,2,3],[4,5,6],[7,8,9]]</textarea>
+						<label for="matrix-a-file" class="file-input">Matrix A JSON file</label>
+						<input id="matrix-a-file" type="file" accept=".json,application/json" />
+					</div>
+					<div>
+						<label for="matrix-b">Matrix B (JSON 2D array)</label>
+						<textarea id="matrix-b">[[9,8,7],[6,5,4],[3,2,1]]</textarea>
+						<label for="matrix-b-file" class="file-input">Matrix B JSON file</label>
+						<input id="matrix-b-file" type="file" accept=".json,application/json" />
+					</div>
+					<div>
+						<label for="tile-size">Tile Size</label>
+						<input id="tile-size" type="number" min="1" max="32" value="8" />
+						<button id="submit-job" class="btn">Submit Matrix Job</button>
+						<button id="reset-queue" class="btn btn-secondary">Reset Queue</button>
+						<div id="status">Waiting for connection...</div>
+					</div>
+				</div>
+			</section>
+
+			<section class="card">
+				<div class="metrics">
+					<article class="metric"><div class="label">Job Status</div><div id="job-status" class="value">-</div></article>
+					<article class="metric"><div class="label">Total Tiles</div><div id="total-tiles" class="value">0</div></article>
+					<article class="metric"><div class="label">Completed Tiles</div><div id="completed-tiles" class="value">0</div></article>
+					<article class="metric"><div class="label">Progress</div><div id="progress" class="value">0%</div></article>
+				</div>
+			</section>
+
+			<section class="card">
+				<h2>Result Matrix (C)</h2>
+				<div class="table-wrap" id="result-wrap"></div>
+			</section>
+		</main>
+
+		<script type="module" src="/client/matrix-dashboard/dashboard.js"></script>
+	</body>
+</html>

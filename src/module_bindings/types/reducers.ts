@@ -13,6 +13,7 @@ import ResetPinCrackReducer from "../reset_pin_crack_reducer";
 import ResetTaskReducer from "../reset_task_reducer";
 import SetTaskActiveReducer from "../set_task_active_reducer";
 import SetTaskHelpReducer from "../set_task_help_reducer";
+import SubmitMatrixJobReducer from "../submit_matrix_job_reducer";
 import SubmitResultReducer from "../submit_result_reducer";
 
 export type HeartbeatParams = __Infer<typeof HeartbeatReducer>;
@@ -22,5 +23,6 @@ export type ResetPinCrackParams = __Infer<typeof ResetPinCrackReducer>;
 export type ResetTaskParams = __Infer<typeof ResetTaskReducer>;
 export type SetTaskActiveParams = __Infer<typeof SetTaskActiveReducer>;
 export type SetTaskHelpParams = __Infer<typeof SetTaskHelpReducer>;
+export type SubmitMatrixJobParams = __Infer<typeof SubmitMatrixJobReducer>;
 export type SubmitResultParams = __Infer<typeof SubmitResultReducer>;
 

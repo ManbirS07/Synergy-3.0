@@ -5,6 +5,7 @@ const IMAGE_HEIGHT = 960;
 
 const MANDELBROT_TASK_ID = 1;
 const PIN_TASK_ID = 2;
+const MATRIX_TASK_ID = 3;
 
 const DEFAULT_GRID_COLS = 40;
 const DEFAULT_GRID_ROWS = 40;
@@ -17,6 +18,7 @@ const DEFAULT_IM_MAX = 1.6;
 const DEFAULT_PIN_LENGTH = 6;
 const DEFAULT_PIN_TOTAL_CANDIDATES = 1000000;
 const DEFAULT_PIN_CHUNK_SIZE = 10000;
+const DEFAULT_MATRIX_TILE_SIZE = 8;
 const MAX_INFLIGHT_CHUNKS_PER_NODE = 4;
 
 const Task = table(
@@ -164,6 +166,62 @@ const PinCrackConfig = table(
   }
 );
 
+const MatrixJobConfig = table(
+  {
+    name: 'matrix_job_config',
+    public: true,
+  },
+  {
+    id: t.u32().primaryKey(),
+    taskId: t.u32(),
+    aRows: t.u32(),
+    aCols: t.u32(),
+    bCols: t.u32(),
+    tileSize: t.u32(),
+    matrixAJson: t.string(),
+    matrixBJson: t.string(),
+    resultJson: t.string().optional(),
+    status: t.string(),
+    updatedAtMicros: t.u64(),
+  }
+);
+
+const MatrixChunkQueue = table(
+  {
+    name: 'matrix_chunk_queue',
+    public: true,
+    indexes: [
+      {
+        accessor: 'matrix_chunk_queue_by_task_id',
+        algorithm: 'btree',
+        columns: ['taskId'],
+      },
+      {
+        accessor: 'matrix_chunk_queue_by_status',
+        algorithm: 'btree',
+        columns: ['status'],
+      },
+      {
+        accessor: 'matrix_chunk_queue_by_assigned_node',
+        algorithm: 'btree',
+        columns: ['assignedNode'],
+      },
+    ],
+  },
+  {
+    chunkId: t.u64().primaryKey().autoInc(),
+    taskId: t.u32(),
+    status: t.string(),
+    assignedNode: t.identity().optional(),
+    rowStart: t.u32(),
+    rowEnd: t.u32(),
+    colStart: t.u32(),
+    colEnd: t.u32(),
+    tileResultJson: t.string().optional(),
+    updatedAtMicros: t.u64(),
+  }
+);
+
 const NodeStatus = table(
   {
     name: 'node_status',
@@ -189,6 +247,8 @@ const spacetimedb = schema({
   pinChunkQueue: PinChunkQueue,
   gridConfig: GridConfig,
   pinCrackConfig: PinCrackConfig,
+  matrixJobConfig: MatrixJobConfig,
+  matrixChunkQueue: MatrixChunkQueue,
   nodeStatus: NodeStatus,
 });
 
@@ -284,6 +344,17 @@ function clearPinChunks(ctx: any): void {
 
   for (const chunkId of chunkIds) {
     ctx.db.pinChunkQueue.chunkId.delete(chunkId);
+  }
+}
+
+function clearMatrixChunks(ctx: any): void {
+  const chunkIds: bigint[] = [];
+  for (const row of ctx.db.matrixChunkQueue.iter()) {
+    chunkIds.push(row.chunkId);
+  }
+
+  for (const chunkId of chunkIds) {
+    ctx.db.matrixChunkQueue.chunkId.delete(chunkId);
   }
 }
 
@@ -438,6 +509,73 @@ function upsertPinConfig(
   ctx.db.pinCrackConfig.insert(next);
 }
 
+function upsertMatrixJobConfig(
+  ctx: any,
+  config: {
+    aRows: number;
+    aCols: number;
+    bCols: number;
+    tileSize: number;
+    matrixAJson: string;
+    matrixBJson: string;
+    status: string;
+    resultJson?: string;
+  }
+): void {
+  const existing = ctx.db.matrixJobConfig.id.find(1);
+  const next = {
+    id: 1,
+    taskId: MATRIX_TASK_ID,
+    aRows: config.aRows,
+    aCols: config.aCols,
+    bCols: config.bCols,
+    tileSize: config.tileSize,
+    matrixAJson: config.matrixAJson,
+    matrixBJson: config.matrixBJson,
+    resultJson: config.resultJson,
+    status: config.status,
+    updatedAtMicros: ctx.timestamp.microsSinceUnixEpoch,
+  };
+
+  if (existing) {
+    ctx.db.matrixJobConfig.id.update(next);
+    return;
+  }
+
+  ctx.db.matrixJobConfig.insert(next);
+}
+
+function seedMatrixChunks(
+  ctx: any,
+  config: {
+    aRows: number;
+    bCols: number;
+    tileSize: number;
+  }
+): void {
+  clearMatrixChunks(ctx);
+
+  for (let rowStart = 0; rowStart < config.aRows; rowStart += config.tileSize) {
+    const rowEnd = Math.min(config.aRows, rowStart + config.tileSize);
+    for (let colStart = 0; colStart < config.bCols; colStart += config.tileSize) {
+      const colEnd = Math.min(config.bCols, colStart + config.tileSize);
+
+      ctx.db.matrixChunkQueue.insert({
+        chunkId: 0n,
+        taskId: MATRIX_TASK_ID,
+        status: 'pending',
+        assignedNode: undefined,
+        rowStart,
+        rowEnd,
+        colStart,
+        colEnd,
+        tileResultJson: undefined,
+        updatedAtMicros: ctx.timestamp.microsSinceUnixEpoch,
+      });
+    }
+  }
+}
+
 function assignMandelbrotChunk(ctx: any): void {
   let inFlightCount = 0;
   for (const inFlight of ctx.db.mandelbrotChunkQueue.mandelbrot_chunk_queue_by_assigned_node.filter(
@@ -491,6 +629,35 @@ function assignPinChunk(ctx: any): void {
   }
 }
 
+function assignMatrixChunk(ctx: any): void {
+  const job = ctx.db.matrixJobConfig.id.find(1);
+  if (!job || job.status !== 'running') {
+    return;
+  }
+
+  let inFlightCount = 0;
+  for (const inFlight of ctx.db.matrixChunkQueue.matrix_chunk_queue_by_assigned_node.filter(
+    ctx.sender
+  )) {
+    if (inFlight.status === 'processing') {
+      inFlightCount += 1;
+      if (inFlightCount >= MAX_INFLIGHT_CHUNKS_PER_NODE) {
+        return;
+      }
+    }
+  }
+
+  for (const chunk of ctx.db.matrixChunkQueue.matrix_chunk_queue_by_status.filter('pending')) {
+    ctx.db.matrixChunkQueue.chunkId.update({
+      ...chunk,
+      status: 'processing',
+      assignedNode: ctx.sender,
+      updatedAtMicros: ctx.timestamp.microsSinceUnixEpoch,
+    });
+    return;
+  }
+}
+
 function resetMandelbrotTaskToPending(ctx: any): void {
   for (const chunk of ctx.db.mandelbrotChunkQueue.iter()) {
     ctx.db.mandelbrotChunkQueue.chunkId.update({
@@ -527,6 +694,126 @@ function resetPinTaskToPending(ctx: any): void {
   }
 }
 
+function resetMatrixTaskToPending(ctx: any): void {
+  clearMatrixChunks(ctx);
+
+  const job = ctx.db.matrixJobConfig.id.find(1);
+  if (job) {
+    ctx.db.matrixJobConfig.id.delete(job.id);
+  }
+
+  const task = ctx.db.task.taskId.find(MATRIX_TASK_ID);
+  if (task) {
+    ctx.db.task.taskId.update({
+      ...task,
+      requestHelp: false,
+      updatedAtMicros: ctx.timestamp.microsSinceUnixEpoch,
+    });
+  }
+}
+
+function parseMatrixJson(value: string, name: string): number[][] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new SenderError(`${name} must be valid JSON.`);
+  }
+
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new SenderError(`${name} must be a non-empty 2D array.`);
+  }
+
+  const matrix = parsed as unknown[];
+  const firstRow = matrix[0];
+  if (!Array.isArray(firstRow) || firstRow.length === 0) {
+    throw new SenderError(`${name} rows must be non-empty arrays.`);
+  }
+
+  const colCount = firstRow.length;
+  const out: number[][] = [];
+  for (let i = 0; i < matrix.length; i += 1) {
+    const row = matrix[i];
+    if (!Array.isArray(row) || row.length !== colCount) {
+      throw new SenderError(`${name} must be rectangular.`);
+    }
+
+    const numericRow: number[] = [];
+    for (let j = 0; j < row.length; j += 1) {
+      const cell = Number(row[j]);
+      if (!Number.isFinite(cell)) {
+        throw new SenderError(`${name} must contain finite numbers.`);
+      }
+      numericRow.push(cell);
+    }
+    out.push(numericRow);
+  }
+
+  return out;
+}
+
+function tryFinalizeMatrixJob(ctx: any): void {
+  const job = ctx.db.matrixJobConfig.id.find(1);
+  if (!job || job.status !== 'running') {
+    return;
+  }
+
+  const rows = Number(job.aRows);
+  const cols = Number(job.bCols);
+  const result: number[][] = Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => 0)
+  );
+
+  let total = 0;
+  let completed = 0;
+  for (const chunk of ctx.db.matrixChunkQueue.iter()) {
+    total += 1;
+    if (chunk.status !== 'completed') {
+      continue;
+    }
+    completed += 1;
+    if (!chunk.tileResultJson) {
+      continue;
+    }
+
+    const tile = parseMatrixJson(chunk.tileResultJson, 'tileResultJson');
+    const expectedRows = Number(chunk.rowEnd) - Number(chunk.rowStart);
+    const expectedCols = Number(chunk.colEnd) - Number(chunk.colStart);
+    if (tile.length !== expectedRows) {
+      throw new SenderError('Tile result row count mismatch.');
+    }
+
+    for (let r = 0; r < tile.length; r += 1) {
+      if (tile[r].length !== expectedCols) {
+        throw new SenderError('Tile result column count mismatch.');
+      }
+      const globalR = Number(chunk.rowStart) + r;
+      for (let c = 0; c < tile[r].length; c += 1) {
+        const globalC = Number(chunk.colStart) + c;
+        result[globalR][globalC] = tile[r][c];
+      }
+    }
+  }
+
+  if (total > 0 && completed === total) {
+    ctx.db.matrixJobConfig.id.update({
+      ...job,
+      status: 'completed',
+      resultJson: JSON.stringify(result),
+      updatedAtMicros: ctx.timestamp.microsSinceUnixEpoch,
+    });
+
+    const task = ctx.db.task.taskId.find(MATRIX_TASK_ID);
+    if (task) {
+      ctx.db.task.taskId.update({
+        ...task,
+        requestHelp: false,
+        updatedAtMicros: ctx.timestamp.microsSinceUnixEpoch,
+      });
+    }
+  }
+}
+
 export const init = spacetimedb.init(ctx => {
   upsertTask(
     ctx,
@@ -543,6 +830,14 @@ export const init = spacetimedb.init(ctx => {
     'PIN Guessing',
     true,
     true
+  );
+  upsertTask(
+    ctx,
+    MATRIX_TASK_ID,
+    'matrix_mul',
+    'Matrix Multiplication',
+    true,
+    false
   );
 
   const defaultGrid = {
@@ -587,7 +882,31 @@ export const init = spacetimedb.init(ctx => {
 });
 
 export const onConnect = spacetimedb.clientConnected(_ctx => {
-  // Passive observers should not count as active compute nodes.
+  // Keep task catalog self-healing for upgraded existing databases.
+  upsertTask(
+    _ctx,
+    MANDELBROT_TASK_ID,
+    'mandelbrot',
+    'Mandelbrot Rendering',
+    true,
+    true
+  );
+  upsertTask(
+    _ctx,
+    PIN_TASK_ID,
+    'pin_guess',
+    'PIN Guessing',
+    true,
+    true
+  );
+  upsertTask(
+    _ctx,
+    MATRIX_TASK_ID,
+    'matrix_mul',
+    'Matrix Multiplication',
+    true,
+    false
+  );
 });
 
 export const onDisconnect = spacetimedb.clientDisconnected(_ctx => {
@@ -645,6 +964,11 @@ export const reset_task = spacetimedb.reducer(
       return;
     }
 
+    if (task.taskKey === 'matrix_mul') {
+      resetMatrixTaskToPending(ctx);
+      return;
+    }
+
     throw new SenderError('Unsupported task type.');
   }
 );
@@ -668,6 +992,11 @@ export const request_work = spacetimedb.reducer(
 
     if (task.taskKey === 'pin_guess') {
       assignPinChunk(ctx);
+      return;
+    }
+
+    if (task.taskKey === 'matrix_mul') {
+      assignMatrixChunk(ctx);
       return;
     }
 
@@ -747,6 +1076,33 @@ export const submit_result = spacetimedb.reducer(
       return;
     }
 
+    if (task.taskKey === 'matrix_mul') {
+      if (!resultData) {
+        throw new SenderError('Matrix resultData is required.');
+      }
+
+      const chunk = ctx.db.matrixChunkQueue.chunkId.find(chunkId);
+      if (!chunk) {
+        throw new SenderError('Matrix chunk does not exist.');
+      }
+      if (chunk.status !== 'processing') {
+        throw new SenderError('Matrix chunk is not in processing state.');
+      }
+      if (!chunk.assignedNode || chunk.assignedNode.toHexString() !== ctx.sender.toHexString()) {
+        throw new SenderError('Matrix chunk is assigned to another node.');
+      }
+
+      ctx.db.matrixChunkQueue.chunkId.update({
+        ...chunk,
+        status: 'completed',
+        tileResultJson: resultData,
+        updatedAtMicros: ctx.timestamp.microsSinceUnixEpoch,
+      });
+      incrementDonatedCount(ctx);
+      tryFinalizeMatrixJob(ctx);
+      return;
+    }
+
     throw new SenderError('Unsupported task type.');
   }
 );
@@ -809,5 +1165,57 @@ export const reset_pin_crack = spacetimedb.reducer(
 
     upsertPinConfig(ctx, nextConfig);
     seedPinChunks(ctx, nextConfig);
+  }
+);
+
+export const submit_matrix_job = spacetimedb.reducer(
+  {
+    matrixAJson: t.string(),
+    matrixBJson: t.string(),
+    tileSize: t.u32(),
+  },
+  (ctx, { matrixAJson, matrixBJson, tileSize }) => {
+    const a = parseMatrixJson(matrixAJson, 'matrixAJson');
+    const b = parseMatrixJson(matrixBJson, 'matrixBJson');
+
+    const aRows = a.length;
+    const aCols = a[0].length;
+    const bRows = b.length;
+    const bCols = b[0].length;
+
+    if (aCols !== bRows) {
+      throw new SenderError('A.columns must equal B.rows.');
+    }
+
+    if (aRows > 1000 || aCols > 1000 || bCols > 1000) {
+      throw new SenderError('Current limit: max matrix dimension is 1000.');
+    }
+
+    const tile = Math.max(1, Math.min(Number(tileSize), 32));
+    upsertMatrixJobConfig(ctx, {
+      aRows,
+      aCols,
+      bCols,
+      tileSize: tile,
+      matrixAJson: JSON.stringify(a),
+      matrixBJson: JSON.stringify(b),
+      status: 'running',
+      resultJson: undefined,
+    });
+    seedMatrixChunks(ctx, {
+      aRows,
+      bCols,
+      tileSize: tile,
+    });
+
+    const task = ctx.db.task.taskId.find(MATRIX_TASK_ID);
+    if (task) {
+      ctx.db.task.taskId.update({
+        ...task,
+        isActive: true,
+        requestHelp: true,
+        updatedAtMicros: ctx.timestamp.microsSinceUnixEpoch,
+      });
+    }
   }
 );

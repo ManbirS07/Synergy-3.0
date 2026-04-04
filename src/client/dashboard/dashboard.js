@@ -47,6 +47,9 @@ function getTaskLiveViewUrl(taskKey) {
 	if (taskKey === 'pin_guess') {
 		return '/client/pin-dashboard/index.html';
 	}
+	if (taskKey === 'matrix_mul') {
+		return '/client/matrix-dashboard/index.html';
+	}
 	return null;
 }
 
@@ -83,6 +86,24 @@ function getTaskMetrics(task) {
 
 	if (task.taskKey === 'pin_guess') {
 		for (const chunk of conn.db.pinChunkQueue.iter()) {
+			if (Number(chunk.taskId) !== Number(task.taskId)) {
+				continue;
+			}
+			totalChunks += 1;
+			if (chunk.status === 'completed') {
+				completedChunks += 1;
+			}
+			if (chunk.status === 'processing') {
+				processingChunks += 1;
+			}
+			if (chunk.status === 'processing' && chunk.assignedNode) {
+				activeNodeHex.add(chunk.assignedNode.toHexString());
+			}
+		}
+	}
+
+	if (task.taskKey === 'matrix_mul') {
+		for (const chunk of conn.db.matrixChunkQueue.iter()) {
 			if (Number(chunk.taskId) !== Number(task.taskId)) {
 				continue;
 			}
@@ -209,6 +230,11 @@ function render() {
 			activeNodeHex.add(chunk.assignedNode.toHexString());
 		}
 	}
+	for (const chunk of conn.db.matrixChunkQueue.iter()) {
+		if (chunk.status === 'processing' && chunk.assignedNode) {
+			activeNodeHex.add(chunk.assignedNode.toHexString());
+		}
+	}
 
 	totalTasksEl.textContent = `${tasks.length}`;
 	requestingHelpEl.textContent = `${requestingHelp}`;
@@ -286,6 +312,8 @@ DbConnection.builder()
 		connection.db.mandelbrotChunkQueue.onUpdate(render);
 		connection.db.pinChunkQueue.onInsert(render);
 		connection.db.pinChunkQueue.onUpdate(render);
+		connection.db.matrixChunkQueue.onInsert(render);
+		connection.db.matrixChunkQueue.onUpdate(render);
 		connection.db.nodeStatus.onInsert(render);
 		connection.db.nodeStatus.onUpdate(render);
 
@@ -299,6 +327,7 @@ DbConnection.builder()
 				'SELECT * FROM task',
 				'SELECT * FROM mandelbrot_chunk_queue',
 				'SELECT * FROM pin_chunk_queue',
+				'SELECT * FROM matrix_chunk_queue',
 				'SELECT * FROM node_status',
 			]);
 		}
