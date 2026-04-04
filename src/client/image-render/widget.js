@@ -347,6 +347,32 @@ function processMatrixChunkIfMine(row) {
 	});
 }
 
+function sweepExistingAssignments() {
+	if (!conn || !activeTaskId || !isContributing) {
+		return;
+	}
+
+	if (activeTaskKey === 'mandelbrot') {
+		for (const row of conn.db.mandelbrotChunkQueue.iter()) {
+			processMandelbrotChunkIfMine(row);
+		}
+		return;
+	}
+
+	if (activeTaskKey === 'pin_guess') {
+		for (const row of conn.db.pinChunkQueue.iter()) {
+			processPinChunkIfMine(row);
+		}
+		return;
+	}
+
+	if (activeTaskKey === 'matrix_mul') {
+		for (const row of conn.db.matrixChunkQueue.iter()) {
+			processMatrixChunkIfMine(row);
+		}
+	}
+}
+
 worker.onmessage = event => {
 	const { type, payload } = event.data ?? {};
 
@@ -436,6 +462,7 @@ function wireTaskAction() {
 		}
 		setStatus(`Contributing to ${taskKey}. Requesting work...`);
 		renderTaskList();
+		sweepExistingAssignments();
 		maybeClaimWork();
 	});
 }
@@ -515,6 +542,7 @@ function connect() {
 				setStatus('Connected. Pick a task to contribute.');
 				updateSyncedDonationCount();
 				renderTaskList();
+				sweepExistingAssignments();
 			});
 
 			if (typeof subscription.subscribeToAllTables === 'function') {
@@ -537,6 +565,7 @@ function connect() {
 				if (!conn || !activeTaskId || !isContributing) {
 					return;
 				}
+				sweepExistingAssignments();
 				maybeClaimWork();
 			}, 1500);
 		})
