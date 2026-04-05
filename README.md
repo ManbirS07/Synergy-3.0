@@ -1,131 +1,128 @@
-## GridForGood
+# Synergy
 
-Distributed browser compute MVP for a hackathon sponsor track using SpaceTimeDB.
+Synergy is a distributed browser-compute demo built on SpaceTimeDB. Volunteers open the edge page, contribute compute from their browser, and live dashboards visualize progress in real time.
 
-Visitors opt in from a widget embedded on a fake news page. Their browser computes Mandelbrot chunks in a background worker and submits results to SpaceTimeDB. A live dashboard paints chunks in real time.
+## Demo Video
+
+Use the link below to watch the project demo:
+
+[Watch Demo](https://drive.google.com/file/d/10dLCMpfZh0s4sxv7-trG5n1uY9umbE0F/view?usp=sharing)
+
+## What This Repo Contains
+
+- SpaceTimeDB hub module in TypeScript (`spacetimedb/src/index.ts`)
+- Browser edge client + worker (`src/client/image-render`)
+- Server control dashboard (`src/client/dashboard`)
+- Mandelbrot live canvas dashboard (`src/client/mandelbrot-dashboard`)
+- Additional feature pages for PIN and Matrix workflows (`src/client/pin-*`, `src/client/matrix-*`)
+- Generated SpaceTimeDB TypeScript bindings (`src/module_bindings`)
 
 ## Architecture
 
-- Hub: SpaceTimeDB module in TypeScript (state + reducers + pub/sub)
-- Volunteer Node: Browser page + Web Worker + optional WASM fast path
-- Observer Dashboard: Canvas renderer subscribed to chunk queue updates
+- Hub: authoritative queue/state + reducers in SpaceTimeDB
+- Edge node: browser tab requests work, computes in Web Worker, submits results
+- Dashboards: subscribe to tables and render live status
 
-## Directory Structure
+## Current Core Data Flow
 
-```text
-my-project/
-  spacetimedb/
-    src/
-      index.ts                 # Chunk queue + reducers (request_work, submit_result, heartbeat)
-  src/
-    main.ts                    # Tiny local dev connection check
-    assembly/
-      index.ts                 # AssemblyScript Mandelbrot kernel sample
-    client/
-      dashboard/
-        index.html             # Live judge dashboard shell
-        dashboard.js           # Canvas painter + metrics
-      image-render/
-        index.html             # Fake blog + donate compute widget
-        widget.js              # Reducer calls + worker lifecycle + localStorage transparency counter
-        worker.js              # Mandelbrot compute loop (WASM first, JS fallback)
-      wasm/
-        math.wasm              # Provided by task giver or your AS build output
-    module_bindings/
-      ...                      # Generated client bindings (do not edit manually)
-```
+The active core module uses these tables/reducers:
 
-## SpaceTimeDB Data Model
-
-- `chunk_queue`
-  - `chunkId` (u64 pk)
+- Table `chunk_queue`
+  - `chunkId` (u64 primary key)
   - `status` (`pending | processing | completed`)
   - `assignedNode` (identity, optional)
-  - tile placement + complex plane bounds + `pixelData`
-- `node_status`
-  - `nodeId` (identity pk)
+  - chunk bounds + dimensions + `pixelData`
+- Table `node_status`
+  - `nodeId` (identity primary key)
   - `donatedChunks`
   - `lastSeenMicros`
+- Reducers
+  - `request_work()`
+  - `submit_result({ chunkId, pixelData })`
+  - `heartbeat()`
+  - `reset_grid({...})`
 
-## Reducers
+## Project Structure
 
-- `request_work()`
-  - Keeps node heartbeat fresh
-  - Assigns one pending chunk to caller as processing
-- `submit_result({ chunkId, pixelData })`
-  - Verifies caller owns assigned chunk
-  - Marks chunk completed and stores pixel payload
-- `heartbeat()`
-  - Updates node last seen for active node metric
+```text
+Synergy-3.0/
+  spacetimedb/
+    src/
+      index.ts
+  src/
+    client/
+      index.html
+      dashboard/
+      image-render/
+      mandelbrot-dashboard/
+      pin-crack/
+      pin-dashboard/
+      matrix-node/
+      matrix-dashboard/
+      wasm/
+    module_bindings/
+  package.json
+```
 
-## Local Dev Runbook
+## Prerequisites
 
-1. Start SpaceTimeDB server.
+- Node.js 20+
+- SpaceTimeDB CLI installed and logged in (`spacetime login`) when publishing to maincloud
+
+## Local Development Runbook
+
+1. Start local SpaceTimeDB:
 
 ```bash
 spacetime start
 ```
 
-2. Publish the module locally.
+2. Publish module to local database `hack`:
 
 ```bash
-spacetime publish gridforgood --clear-database -y --module-path spacetimedb
+spacetime publish hack --server local --clear-database -y --module-path spacetimedb
 ```
 
-3. Generate bindings after schema/reducer changes.
+3. Regenerate bindings after schema/reducer updates:
 
 ```bash
 spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb
 ```
 
-4. Serve `src` (not `src/client`) with any static file server.
+4. Serve static files from `src` root:
 
 ```bash
 npx serve src -l 4173
 ```
 
-5. Open pages.
-
-- Widget: `http://localhost:4173/client/image-render/index.html`
-- Dashboard: `http://localhost:4173/client/dashboard/index.html`
-
-If you serve `src/client` directly, `/module_bindings/index.js` will be unreachable and compute/dashboard logic will fail to initialize.
-
-6. Optional: set globals before scripts for non-default target.
-
-```html
-<script>
-  window.GRIDFORGOOD_URI = 'wss://maincloud.spacetimedb.com';
-  window.GRIDFORGOOD_DB_NAME = 'gridforgood';
-</script>
-```
-
-## Cloud Runbook
-
-This repo is already configured to target `maincloud` in `spacetime.json`, and the browser clients now default to `wss://maincloud.spacetimedb.com`.
-
-1. Publish the module to the shared database.
-
-```bash
-spacetime publish hack --clear-database -y --module-path spacetimedb
-```
-
-2. Serve the static files.
-
-```bash
-npx serve src -l 4173
-```
-
-3. Open the pages.
+5. Open pages:
 
 - Launcher: `http://localhost:4173/client/index.html`
-- Edge node: `http://localhost:4173/client/image-render/index.html`
 - Server dashboard: `http://localhost:4173/client/dashboard/index.html`
+- Edge node: `http://localhost:4173/client/image-render/index.html`
+- Mandelbrot dashboard: `http://localhost:4173/client/mandelbrot-dashboard/index.html`
 
-If you want to force a different backend from the browser, set `window.GRIDFORGOOD_URI` before loading the scripts.
+Important: serve `src`, not `src/client`, so `/module_bindings/index.js` resolves correctly.
 
-## Hackathon Priority Notes
+## Maincloud Deployment
 
-- Keep chunk payload simple: JSON string for pixel RGBA array is enough for demo speed.
-- Use WASM if ready; JS fallback already works.
-- Do not add auth/distributed consensus in this MVP phase.
+1. Publish backend module:
+
+```bash
+spacetime publish hack --server maincloud --module-path spacetimedb -y
+```
+
+2. Deploy frontend static files (example Vultr flow):
+
+```bash
+scp -r D:\Synergy\Synergy-3.0\src\* root@<your-server>:/var/www/synergy
+```
+
+3. Reload web server on host (example):
+
+```bash
+sudo systemctl reload nginx
+```
+
+
+
